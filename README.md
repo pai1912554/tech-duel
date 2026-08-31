@@ -1,14 +1,16 @@
 # Tech Duel — ดวลความรู้เทคโนโลยี 1v1
 
+**เล่นเลย → https://pai1912554.github.io/tech-duel/**
+
 เกมตอบคำถามเทคโนโลยีพื้นฐาน ดวล 5 ข้อ มีระบบชนะต่อเนื่อง และแรงค์ Bronze → Master
 สร้างตาม Build Spec v1 · ไม่มี dependency ภายนอก · ทำงานได้ออฟไลน์ทั้งหมด
 
-## เปิดเล่น
+## เปิดเล่นในเครื่อง
 
 เปิดไฟล์ `index.html` ด้วยเบราว์เซอร์ได้เลย หรือเสิร์ฟผ่าน HTTP:
 
 ```bash
-python -m http.server 8811 -b 127.0.0.1 -d C:/Users/hp/tech-duel
+python -m http.server 8811 -b 127.0.0.1
 ```
 
 แล้วเปิด http://localhost:8811
