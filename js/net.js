@@ -18,19 +18,69 @@ const NET = (() => {
   let queueEs = null;       // EventSource ของคิวจับคู่ (firebase)
   let peer = null, conn = null;   // p2p
   let seen = new Set();
+  let warm = null;                // Peer ที่อุ่นเครื่องไว้ล่วงหน้า
+  let status = () => {};          // callback บอกสถานะระหว่างต่อ
+
+  /* เซิร์ฟเวอร์ STUN ไว้หาเส้นทางกันเอง ยิ่งมีหลายตัวยิ่งมีโอกาสต่อติดเร็ว */
+  const PEER_OPTS = {
+    config: {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:global.stun.twilio.com:3478" }
+      ]
+    }
+  };
 
   const emit = (ev, data) => handlers.forEach(h => h(ev, data));
   const slim = p => ({ id: p.id, name: p.name, displayName: p.displayName, mmr: p.mmr, streak: p.streak });
 
   /* ================= PeerJS (โหลดตอนใช้จริงเท่านั้น) ================= */
+  /* โหลดจากไฟล์ในเว็บเราเองก่อน (เร็วกว่าและไม่ตายถ้า CDN ถูกบล็อก) ค่อยถอยไป CDN */
+  let peerJsLoading = null;
   function loadPeerJS() {
     if (window.Peer) return Promise.resolve();
-    return new Promise((res, rej) => {
+    if (peerJsLoading) return peerJsLoading;
+    const tryLoad = src => new Promise((res, rej) => {
       const s = document.createElement("script");
-      s.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
+      s.src = src;
       s.onload = res;
-      s.onerror = () => rej(new Error("โหลดไลบรารี P2P ไม่สำเร็จ ต้องต่ออินเทอร์เน็ต หรือไปตั้งค่าเซิร์ฟเวอร์แทน"));
+      s.onerror = () => rej(new Error("โหลดไม่สำเร็จ: " + src));
       document.head.appendChild(s);
+    });
+    peerJsLoading = tryLoad("js/vendor/peerjs.min.js")
+      .catch(() => tryLoad("https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"))
+      .catch(() => { peerJsLoading = null; throw new Error("โหลดไลบรารี P2P ไม่สำเร็จ ต้องต่ออินเทอร์เน็ตก่อน"); });
+    return peerJsLoading;
+  }
+
+  /* เปิด Peer ทิ้งไว้ตั้งแต่อยู่ห้องโถง ตอนกดปุ่มจริงจะได้ไม่ต้องรอขั้นตอนนี้อีก
+     ขั้นขอ ID จากโบรกเกอร์คือขั้นที่ช้าที่สุด กินเวลาได้หลายวินาที */
+  function prewarm() {
+    if (CFG.online || warm || peer) return;
+    loadPeerJS().then(() => {
+      if (warm || peer) return;
+      const p = new Peer(undefined, PEER_OPTS);
+      p.on("open", () => { warm = p; });
+      p.on("error", () => { try { p.destroy(); } catch {} });
+    }).catch(() => {});
+  }
+
+  /* ขอ Peer ที่พร้อมใช้ — ถ้าอุ่นไว้แล้วได้ทันที */
+  function openPeer(id) {
+    return new Promise(async (res, rej) => {
+      await loadPeerJS();
+      if (!id && warm && warm.open) { const p = warm; warm = null; return res(p); }
+      status(id ? "กำลังจองรหัสห้อง…" : "กำลังขอที่อยู่จากเซิร์ฟเวอร์…");
+      const p = new Peer(id, PEER_OPTS);
+      const timer = setTimeout(() => rej(new Error("เซิร์ฟเวอร์หาคู่ตอบช้าผิดปกติ ลองกดใหม่อีกครั้ง")), 20000);
+      p.on("open", () => { clearTimeout(timer); res(p); });
+      p.on("error", err => {
+        clearTimeout(timer);
+        rej(new Error(err.type === "unavailable-id"
+          ? "รหัสห้องนี้ถูกใช้อยู่ ลองกดสร้างใหม่อีกครั้ง"
+          : "ต่อ P2P ไม่สำเร็จ: " + err.type));
+      });
     });
   }
 
@@ -73,6 +123,8 @@ const NET = (() => {
     get inRoom() { return !!room; },
     newCode,
 
+    prewarm,
+    onStatus(fn) { status = fn || (() => {}); },
     on(fn)  { handlers.push(fn); },
     off(fn) { handlers = handlers.filter(h => h !== fn); },
     clear() { handlers = []; },
@@ -88,13 +140,7 @@ const NET = (() => {
         await db.fb.put(`rooms/${code}`, { host: slim(me), createdAt: Date.now(), private: true });
         openRoomStream(code);
       } else {
-        await loadPeerJS();
-        await new Promise((res, rej) => {
-          peer = new Peer(peerId(code));
-          peer.on("open", res);
-          peer.on("error", err => rej(new Error(err.type === "unavailable-id"
-            ? "รหัสห้องนี้ถูกใช้อยู่ ลองกดสร้างใหม่อีกครั้ง" : "ต่อ P2P ไม่สำเร็จ: " + err.type)));
-        });
+        peer = await openPeer(peerId(code));
         peer.on("connection", c => {
           wireConn(c);
           c.on("open", () => { c.send({ t: "hello", who: room.me }); });
@@ -118,15 +164,11 @@ const NET = (() => {
         await db.fb.put(`rooms/${code}/guest`, slim(me));
         openRoomStream(code);
       } else {
-        await loadPeerJS();
-        await new Promise((res, rej) => {
-          peer = new Peer();
-          peer.on("open", res);
-          peer.on("error", err => rej(new Error("ต่อ P2P ไม่สำเร็จ: " + err.type)));
-        });
+        peer = await openPeer();
+        status("กำลังต่อกับเจ้าของห้อง…");
         await new Promise((res, rej) => {
           const c = peer.connect(peerId(code), { reliable: true });
-          const timer = setTimeout(() => rej(new Error("ไม่พบห้องรหัสนี้ หรือเจ้าของห้องออกไปแล้ว")), 12000);
+          const timer = setTimeout(() => rej(new Error("ต่อกับห้อง " + code + " ไม่ได้ — เช็กว่าเจ้าของห้องยังเปิดหน้าเว็บค้างอยู่ และพิมพ์รหัสถูก")), 15000);
           c.on("open", () => { clearTimeout(timer); wireConn(c); c.send({ t: "hello", who: room.me }); res(); });
           c.on("error", () => { clearTimeout(timer); rej(new Error("เข้าห้องไม่สำเร็จ")); });
         });
@@ -210,6 +252,7 @@ const NET = (() => {
         try { conn && conn.close(); } catch {}
         try { peer && peer.destroy(); } catch {}
         conn = peer = null;
+        setTimeout(prewarm, 500);          // อุ่นเครื่องรอบใหม่ไว้เลย
       }
       handlers = [];
     }

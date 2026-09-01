@@ -245,3 +245,4 @@ h1,h2,h3{margin:0 0 .5rem}
 .diag .y{color:var(--good)}
 .diag .n{color:var(--bad)}
 .diag .ua{color:var(--tx3);font-size:11px;word-break:break-all;margin-top:6px;line-height:1.4}
+.waitsec{color:var(--tx3);font-size:12.5px;margin-top:6px}

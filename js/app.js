@@ -235,6 +235,7 @@ function screenLobby(flash) {
       </section>
     </main>`;
   bindNav();
+  NET.prewarm();                     // เปิดช่องทางรอไว้ตั้งแต่ตอนนี้ กดปุ่มแล้วจะได้ไม่ต้องรอ
   $("#btnQuick").onclick = quickMatch;
   $("#btnCreate").onclick = createRoom;
   $("#btnJoin").onclick = joinRoomPrompt;
@@ -247,10 +248,12 @@ const transport = () => CFG.online ? "firebase" : "p2p";
 
 /* ================= หา/สร้างห้อง ================= */
 function screenWaiting({ title, code, note, onCancel }) {
+  clearInterval(window.__waitTimer);
   app.innerHTML = topbar("lobby") + `
     <main class="wrap">
       <section class="card vs-card">
-        <div class="finding">${title}</div>
+        <div class="finding" id="waitTitle">${title}</div>
+        <div class="waitsec" id="waitSec"></div>
         ${code ? `
           <div class="roomcode">
             <span>รหัสห้อง</span>
@@ -262,6 +265,15 @@ function screenWaiting({ title, code, note, onCancel }) {
       </section>
     </main>`;
   bindNav();
+  // นับวินาทีให้เห็น จะได้รู้ว่ายังทำงานอยู่ ไม่ใช่ค้าง
+  const t0 = Date.now();
+  window.__waitTimer = setInterval(() => {
+    const box = $("#waitSec");
+    if (!box) return clearInterval(window.__waitTimer);
+    const sec = Math.round((Date.now() - t0) / 1000);
+    box.textContent = sec + " วินาที" + (sec >= 12 ? " · ช้ากว่าปกติ ถ้าเกินครึ่งนาทีให้กดยกเลิกแล้วลองใหม่" : "");
+  }, 500);
+  NET.onStatus(txt => { const t = $("#waitTitle"); if (t) t.textContent = txt; });
   $("#cancelWait").onclick = onCancel;
   if (code) $("#copyCode").onclick = async () => {
     try { await navigator.clipboard.writeText(code); $("#copyCode").textContent = "คัดลอกแล้ว"; }
@@ -291,7 +303,7 @@ async function quickMatch() {
 
 async function createRoom() {
   try {
-    screenWaiting({ title: "กำลังสร้างห้อง…", note: "รอสักครู่", onCancel: async () => { await quitMatch(true); screenLobby(); } });
+    screenWaiting({ title: "กำลังเตรียมห้อง…", note: "กำลังจองรหัสห้องกับเซิร์ฟเวอร์หาคู่", onCancel: async () => { await quitMatch(true); screenLobby(); } });
     armMatch();
     const code = await NET.createRoom(ME, transport());
     waitForPeer("รอเพื่อนเข้าห้อง…", code);
@@ -323,7 +335,7 @@ function joinRoomPrompt() {
     if (code.length !== 4) return $("#joinErr").textContent = "รหัสห้องมี 4 ตัว";
     $("#doJoin").disabled = true;
     try {
-      screenWaiting({ title: "กำลังเข้าห้อง…", note: "รอสักครู่", onCancel: async () => { await quitMatch(true); screenLobby(); } });
+      screenWaiting({ title: "กำลังเข้าห้อง…", note: "เจ้าของห้องต้องเปิดหน้าเว็บค้างไว้ตลอด", onCancel: async () => { await quitMatch(true); screenLobby(); } });
       armMatch();
       await NET.joinRoom(ME, code, transport());
       onPeerReady(NET.room.opp);          // ฝั่งเข้าห้องรู้จักเจ้าของห้องอยู่แล้ว
@@ -379,6 +391,8 @@ function onPeerReady(opp) {
 }
 
 async function showVersus(opp) {
+  clearInterval(window.__waitTimer);
+  NET.onStatus(null);
   app.innerHTML = topbar("lobby") + `
     <main class="wrap">
       <section class="card vs-card">
