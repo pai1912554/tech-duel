@@ -211,3 +211,33 @@ h1,h2,h3{margin:0 0 .5rem}
   .hist summary{grid-template-columns:40px 56px 1fr;row-gap:2px}
   .ht{display:none}
 }
+
+/* ---------- โหมดออนไลน์ / ห้อง ---------- */
+.net-chip{background:#1a2338;border:1px solid var(--line);border-radius:999px;padding:2px 9px;
+  font-size:11.5px;color:var(--tx3)}
+.net-chip.on{border-color:#1e5a37;color:#8ef0b6;background:#12251c}
+.mode-note{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+  background:#121a2b;border:1px solid var(--line);border-radius:11px;padding:9px 11px;
+  font-size:12.5px;color:var(--tx2);margin-top:10px}
+.mode-note.on{border-color:#1e5a37;color:#9df3bf}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.lbl{display:block;font-size:13px;color:var(--tx2);margin:10px 0}
+.lbl input{width:100%;margin-top:5px;padding:11px;border-radius:11px;border:1px solid var(--line);
+  background:#0f1626;outline:none}
+.lbl input:focus{border-color:var(--acc)}
+.howto{background:#121a2b;border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin:10px 0;font-size:13px}
+.howto summary{cursor:pointer;color:var(--acc)}
+.howto ol{margin:8px 0;padding-left:20px;color:var(--tx2);line-height:1.8}
+.howto code{background:#0f1626;padding:1px 5px;border-radius:5px;font-size:12px}
+.roomcode{display:flex;align-items:center;justify-content:center;gap:12px;margin:16px 0 6px;flex-wrap:wrap}
+.roomcode span{color:var(--tx3);font-size:13px}
+.roomcode b{font-size:40px;letter-spacing:8px;font-family:ui-monospace,Consolas,monospace;
+  color:var(--gold);text-shadow:0 0 28px rgba(255,201,74,.35)}
+.codeinput{width:100%;margin:12px 0;padding:16px;text-align:center;font-size:34px;letter-spacing:12px;
+  text-transform:uppercase;font-family:ui-monospace,Consolas,monospace;border-radius:12px;
+  border:1px solid var(--line);background:#0f1626;outline:none}
+.codeinput:focus{border-color:var(--acc)}
+.choice.picked{border-color:var(--acc)}
+.btabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}
+.btab{white-space:nowrap}
+@media(max-width:700px){ .row2{grid-template-columns:1fr} .roomcode b{font-size:32px;letter-spacing:6px} }

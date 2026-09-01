@@ -36,6 +36,7 @@ function newPlayer(name, displayName, pinHash, salt) {
     dailyStreak: 1, lastPlayDay: todayKey(),
     wins: 0, losses: 0,
     totalAnswerMs: 0, totalAnswers: 0,
+    bestScore: 0, fastestMs: null, avgAnswerMs: null,
     byCategory: Object.fromEntries(Object.keys(CATEGORIES).map(k => [k, { c: 0, w: 0 }])),
     recentIds: [], friends: [],
     fails: 0, lockUntil: 0,
@@ -232,7 +233,7 @@ function applyMmr(p, delta) {
 }
 
 /* ============ 04 · คะแนนต่อข้อ ============ */
-const LIMIT_MS = 10000;
+const LIMIT_MS = 30000;          // 30 วินาทีต่อข้อ
 
 function roundPoints(correct, ms, isFirst) {
   if (!correct) return 0;
@@ -318,77 +319,10 @@ function reportQuestion(qid) {
   return s.reports;
 }
 
-/* ============ 04 · คู่แข่ง Ghost ============ */
-const GHOST_NAMES = ["สมชายซ่าส์", "noobmaster", "ปลาทูทอด", "byte_lord", "เจ๊หมวย404",
-  "kernelpanic", "หมีขาว", "ping9999", "ครูไอที", "sudohero", "แมวเหมียว",
-  "null_ptr", "ลุงตุ๋ย", "ctrlz", "ข้าวมันไก่", "ยัยตัวร้าย", "root_kit",
-  "น้องเมย์", "hex_ma", "พี่บอลไอที", "cache_miss", "ป้าแดง", "zerocool", "ตี๋น้อย"];
+/* ============ 04 · รูปแบบแมตช์ ============ */
+const QUESTIONS_PER_MATCH = 10;  // ดวล 10 ข้อ เสมอเมื่อไหร่ต่อ Sudden Death
+const SUDDEN_DEATH_MAX = 5;
 
-/* บอทถูกเก็บเป็นผู้เล่นจริงในฐานข้อมูล เพื่อให้ลีดเดอร์บอร์ดมีชีวิต
-   ไม่มีใครล็อกอินเป็นบอทได้ เพราะ pinHash สุ่มและไม่มีใครรู้ */
-async function seedBots() {
-  const existing = await db.allPlayers();
-  if (existing.some(p => p.isBot)) return;
-  for (let i = 0; i < GHOST_NAMES.length; i++) {
-    const name = GHOST_NAMES[i];
-    if (existing.some(p => p.name === name)) continue;
-    const mmr = 700 + Math.round(Math.random() * 1700);
-    const games = 12 + Math.floor(Math.random() * 90);
-    const wins = Math.round(games * (0.35 + Math.random() * 0.3));
-    const streak = Math.random() < 0.1 ? 15 + Math.floor(Math.random() * 7)
-                 : Math.random() < 0.35 ? 1 + Math.floor(Math.random() * 7) : 0;
-    const p = newPlayer(name, name, crypto.randomUUID(), crypto.randomUUID().slice(0, 8));
-    Object.assign(p, {
-      isBot: true, mmr, wins, losses: games - wins, streak,
-      bestStreak: Math.max(streak, 2 + Math.floor(Math.random() * 14)),
-      totalAnswers: games * 5,
-      totalAnswerMs: games * 5 * (2200 + Math.random() * 3000)
-    });
-    await db.savePlayer(p);
-  }
-}
-
-/* จับคู่กับบอทที่ MMR ใกล้กันที่สุด ถ้าไม่มีค่อยสร้างผีชั่วคราว */
-async function makeGhost(myMmr) {
-  const bots = (await db.allPlayers()).filter(p => p.isBot);
-  const near = bots.filter(b => Math.abs(b.mmr - myMmr) < 260);
-  const pool = near.length ? near : bots;
-  if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
-  return {
-    id: "p_ghost_" + Math.random().toString(36).slice(2, 6),
-    name: "ghost", displayName: "ผีไร้ชื่อ",
-    mmr: Math.max(200, Math.round(myMmr + (Math.random() * 400 - 200))),
-    streak: 0, wins: 0, losses: 0, isGhost: true
-  };
-}
-
-/* อัปเดตผลให้ฝั่งบอทด้วย บอร์ดจะได้ขยับจริงตามการเล่น */
-async function applyOpponentResult(opp, oppWon, delta) {
-  if (!opp || !opp.isBot) return;
-  oppWon ? opp.wins++ : opp.losses++;
-  opp.streak = oppWon ? opp.streak + 1 : 0;
-  if (opp.streak > opp.bestStreak) opp.bestStreak = opp.streak;
-  opp.mmr = Math.max(0, opp.mmr + delta);
-  await db.savePlayer(opp);
-}
-
-/* หยิบเวลาตอบจริงของคนที่ MMR ใกล้กันมารีเพลย์ ถ้าไม่มีข้อมูลค่อยจำลอง */
-function ghostAnswer(q, ghost) {
-  const s = questionStats(q);
-  const pool = (s.times || []).filter(t => Math.abs(t.mmr - ghost.mmr) < 200);
-  let pick;
-  if (pool.length) {
-    pick = pool[Math.floor(Math.random() * pool.length)];
-  } else {
-    const skill = Math.max(0.25, Math.min(0.95, 0.35 + (ghost.mmr - 600) / 2600));
-    const diff = effectiveDifficulty(q);
-    pick = {
-      ms: 1400 + diff * 350 + Math.random() * 2800,
-      correct: Math.random() < skill - (diff - 3) * 0.07
-    };
-  }
-  return {
-    correct: pick.correct,
-    ms: Math.min(LIMIT_MS, Math.round(pick.ms * (0.9 + Math.random() * 0.2)))
-  };
-}
+/* สลับตำแหน่งตัวเลือกทุกข้อ ไม่งั้นคำตอบจะกองอยู่ตัวเลือกแรกจนจำแพตเทิร์นได้
+   เจ้าของห้องสุ่มลำดับแล้วส่งไปกับโจทย์ ทั้งสองฝั่งจึงเห็นเรียงเหมือนกันเป๊ะ */
+const newChoiceOrder = () => shuffle([0, 1, 2, 3]);
