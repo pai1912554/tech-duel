@@ -15,8 +15,21 @@ const db = (() => {
   const write = (k, v)  => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn("เขียนข้อมูลไม่สำเร็จ", e); } };
   /* เก็บผู้เล่นแยกคีย์ละคน ไม่ใช่ก้อนเดียว
      ถ้าเก็บก้อนเดียว เปิดสองแท็บเล่นกันเองจะเกิด lost update ทับกันเอง */
-  const nameList = () => read(K.players, []);
   const pKey = n => "td_p_" + n;
+  /* คืนรายชื่อผู้เล่นในเครื่อง พร้อมย้ายข้อมูลรูปแบบเก่าให้อัตโนมัติ
+     เวอร์ชันแรกเก็บผู้เล่นทุกคนเป็น object ก้อนเดียวใน td_players
+     เครื่องที่เคยเล่นเวอร์ชันนั้นจะมี object ค้างอยู่ ถ้าไม่แปลงก่อนจะพังทันทีที่เปิดเกม */
+  function nameList() {
+    const raw = read(K.players, []);
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      const names = Object.keys(raw);
+      names.forEach(n => { if (raw[n] && !localStorage.getItem(pKey(n))) write(pKey(n), raw[n]); });
+      write(K.players, names);
+      return names;
+    }
+    return [];
+  }
   const localPlayer = n => read(pKey(n), null);
   const localPlayers = () => Object.fromEntries(nameList().map(n => [n, localPlayer(n)]).filter(([, v]) => v));
   function localSave(p) {
