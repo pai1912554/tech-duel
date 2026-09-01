@@ -74,7 +74,7 @@ const db = (() => {
 
     /* ---- session (อยู่ที่เครื่องเสมอ) ---- */
     getSession()   { const s = read(K.session, null); return (s && s.exp > Date.now()) ? s : null; },
-    setSession(id) { write(K.session, { id, token: crypto.randomUUID(), exp: Date.now() + 30 * 86400000 }); },
+    setSession(id) { write(K.session, { id, token: uid(), exp: Date.now() + 30 * 86400000 }); },
     clearSession() { localStorage.removeItem(K.session); },
 
     /* ---- ประวัติแมตช์ (เก็บที่เครื่อง ประวัติเป็นเรื่องส่วนตัว) ---- */

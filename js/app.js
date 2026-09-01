@@ -37,12 +37,18 @@ function screenLogin(msg) {
             : `📴 ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์ — บัญชีอยู่เฉพาะเครื่องนี้ เล่นกับเพื่อนได้ด้วยรหัสห้อง`}
           <button type="button" class="btn ghost sm" id="btnSetup">ตั้งค่าเซิร์ฟเวอร์</button>
         </div>
+        ${storageWorks() ? "" : `<p class="warn">⚠ เบราว์เซอร์นี้เก็บข้อมูลไม่ได้ (โหมดส่วนตัว หรือปิดการเก็บข้อมูลเว็บไว้)
+        เกมจะเล่นได้แต่จำบัญชีไม่ได้ ลองเปิดในโหมดปกติ</p>`}
         <p class="warn">⚠ รหัส 6 หลักมีความเป็นไปได้แค่ 1 ล้านแบบ และข้อมูลไม่ได้เข้ารหัสระดับใช้งานจริง
         — <b>อย่าใช้รหัสเดียวกับบัญชีอื่น</b></p>
+        <details class="howto"><summary>เข้าไม่ได้? กดดูผลตรวจเครื่อง</summary>
+          <div id="diag" class="diag"></div>
+        </details>
       </form>
     </div>`;
 
   $("#btnSetup").onclick = () => screenSetup(() => screenLogin());
+  renderDiag();
   $("#loginForm").onsubmit = async e => {
     e.preventDefault();
     const btn = $("#loginForm button[type=submit]");
@@ -57,6 +63,33 @@ function screenLogin(msg) {
     }
   };
 }
+
+/* ผลตรวจความเข้ากันได้ของเบราว์เซอร์ — ให้ผู้เล่นแคปหน้าจอส่งมาได้เวลาเข้าไม่ได้ */
+function renderDiag() {
+  const box = $("#diag");
+  if (!box) return;
+  const ok = v => v ? '<b class="y">ผ่าน</b>' : '<b class="n">ไม่ผ่าน</b>';
+  let hasUUID = false, hasRnd = false;
+  try { hasUUID = typeof crypto?.randomUUID === "function"; } catch {}
+  try { hasRnd = typeof crypto?.getRandomValues === "function"; } catch {}
+  box.innerHTML = `
+    <div>หน้าเว็บปลอดภัย (HTTPS): ${ok(window.isSecureContext)}</div>
+    <div>เก็บข้อมูลในเครื่อง: ${ok(storageWorks())}</div>
+    <div>เข้ารหัสรหัสผ่าน (SHA-256): ${ok(!!(window.crypto && crypto.subtle))}</div>
+    <div>สุ่มค่าแบบมาตรฐาน: ${ok(hasUUID)} / สำรอง: ${ok(hasRnd)}</div>
+    <div>ต่อ P2P (WebRTC): ${ok(typeof RTCPeerConnection === "function")}</div>
+    <div class="ua">${esc(navigator.userAgent)}</div>`;
+}
+
+/* กัน "จอขาว" — error ที่หลุดออกมาต้องเห็นบนจอ ไม่ใช่ซ่อนอยู่ใน console ที่มือถือเปิดดูไม่ได้ */
+window.addEventListener("error", e => {
+  const box = $("#loginErr") || $(".err");
+  if (box) box.textContent = "เกิดข้อผิดพลาด: " + (e.message || e.error);
+});
+window.addEventListener("unhandledrejection", e => {
+  const box = $("#loginErr") || $(".err");
+  if (box) box.textContent = "เกิดข้อผิดพลาด: " + (e.reason?.message || e.reason);
+});
 
 /* ================= หน้าจอ: ตั้งค่าเซิร์ฟเวอร์ ================= */
 function screenSetup(back) {

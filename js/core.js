@@ -54,7 +54,7 @@ async function login(rawName, pin) {
   let p = await db.getPlayer(name);
 
   if (!p) {                                    // ยังไม่มีชื่อนี้ = สมัครใหม่ทันที
-    const salt = crypto.randomUUID().slice(0, 8);
+    const salt = uid().slice(0, 8);
     p = newPlayer(name, rawName.trim(), await hashPin(pin, salt), salt);
     await db.savePlayer(p);
     db.setSession(p.id);
